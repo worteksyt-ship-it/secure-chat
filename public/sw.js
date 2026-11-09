@@ -1,6 +1,6 @@
 // VIZARD service worker: caches the app shell only. Never touches /ws or /health.
-const CACHE = 'vizard-shell-v2';
-const SHELL = ['/', '/index.html', '/style.css', '/app.js', '/logo.svg', '/manifest.webmanifest',
+const CACHE = 'vizard-shell-v3';
+const SHELL = ['/', '/index.html', '/style.css', '/app.js', '/logo.svg', '/wordmark.svg', '/manifest.webmanifest',
   '/favicon-32.png', '/apple-touch-icon.png', '/icon-192.png', '/icon-512.png', '/icon-maskable-192.png', '/icon-maskable-512.png'];
 
 self.addEventListener('install', (e) => {
