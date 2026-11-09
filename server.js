@@ -24,14 +24,21 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 `);
+// Rooms: every distinct passphrase is its own room. The client derives an opaque
+// roomId from the passphrase (separate one-way derivation from the encryption key).
+if (!db.prepare("SELECT 1 FROM pragma_table_info('messages') WHERE name = 'room'").get()) {
+  db.exec("ALTER TABLE messages ADD COLUMN room TEXT NOT NULL DEFAULT ''");
+}
+db.exec('CREATE INDEX IF NOT EXISTS messages_room_id ON messages (room, id)');
 // Room salt must be stable across restarts (Render's disk is ephemeral), so it is
 // NOT stored in the DB. Override with ROOM_SALT (base64, >= 16 bytes) if desired.
 const DEFAULT_SALT = 'bfq0F6x0n7Tq3Jm1v9cK2w==';
 const BOOT = crypto.randomBytes(6).toString('hex'); // changes on every restart
 const salt = (process.env.ROOM_SALT && /^[A-Za-z0-9+/]{22,}={0,2}$/.test(process.env.ROOM_SALT)) ? process.env.ROOM_SALT : DEFAULT_SALT;
-const insertMsg = db.prepare('INSERT INTO messages (ts, iv, ct) VALUES (?, ?, ?)');
-const lastMsgs = db.prepare('SELECT id, ts, iv, ct FROM (SELECT * FROM messages ORDER BY id DESC LIMIT ?) ORDER BY id ASC');
-const prune = db.prepare('DELETE FROM messages WHERE id <= (SELECT id FROM messages ORDER BY id DESC LIMIT 1 OFFSET 5000)');
+const insertMsg = db.prepare('INSERT INTO messages (room, ts, iv, ct) VALUES (?, ?, ?, ?)');
+const lastMsgs = db.prepare('SELECT id, ts, iv, ct FROM (SELECT * FROM messages WHERE room = ? ORDER BY id DESC LIMIT ?) ORDER BY id ASC');
+const prune = db.prepare('DELETE FROM messages WHERE room = ? AND id <= (SELECT id FROM messages WHERE room = ? ORDER BY id DESC LIMIT 1 OFFSET 2000)');
+const roomRe = /^[a-f0-9]{32}$/;
 
 // ---------- http ----------
 const app = express();
@@ -64,21 +71,21 @@ function clientIp(req) {
   return req.headers['cf-connecting-ip'] || req.socket.remoteAddress;
 }
 // Unique people online = unique client ids (one per browser), not sockets.
-function onlineCount() {
+function onlineCount(room) {
   const s = new Set();
-  for (const c of wss.clients) if (c.readyState === 1 && c.cid) s.add(c.cid);
+  for (const c of wss.clients) if (c.readyState === 1 && c.room === room) s.add(c.cid);
   return s.size;
 }
 const isB64 = (s, max) => typeof s === 'string' && s.length > 0 && s.length <= max && /^[A-Za-z0-9+/]+={0,2}$/.test(s);
 
-function broadcast(obj, except) {
+function broadcast(room, obj, except) {
   const data = JSON.stringify(obj);
-  for (const c of wss.clients) if (c !== except && c.readyState === 1) c.send(data);
+  for (const c of wss.clients) if (c !== except && c.room === room && c.readyState === 1) c.send(data);
 }
-let onlineTimer = null;
-function online() {
-  if (onlineTimer) return;
-  onlineTimer = setTimeout(() => { onlineTimer = null; broadcast({ type: 'online', count: onlineCount() }); }, 50);
+const onlineTimers = new Map();
+function online(room) {
+  if (onlineTimers.has(room)) return;
+  onlineTimers.set(room, setTimeout(() => { onlineTimers.delete(room); broadcast(room, { type: 'online', count: onlineCount(room) }); }, 50));
 }
 
 wss.on('connection', (ws, req) => {
@@ -88,6 +95,9 @@ wss.on('connection', (ws, req) => {
   const cid = idRe.test(q.get('cid') || '') ? q.get('cid') : crypto.randomBytes(9).toString('hex');
   const tid = idRe.test(q.get('tid') || '') ? q.get('tid') : crypto.randomBytes(9).toString('hex');
   ws.cid = cid;
+  const room = q.get('room');
+  if (!roomRe.test(room || '')) { ws.close(4001, 'room required'); return; }
+  ws.room = room;
   const tabKey = cid + ':' + tid;
   ipCount.set(ip, (ipCount.get(ip) || 0) + 1);
 
@@ -95,7 +105,7 @@ wss.on('connection', (ws, req) => {
     if (byTab.get(tabKey) === ws) byTab.delete(tabKey);
     const c = (ipCount.get(ip) || 1) - 1;
     if (c <= 0) ipCount.delete(ip); else ipCount.set(ip, c);
-    online();
+    online(room);
   });
 
   // Same tab reconnecting (e.g. phone resumed from background): kill the stale socket.
@@ -110,8 +120,8 @@ wss.on('connection', (ws, req) => {
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
 
-  ws.send(JSON.stringify({ type: 'hello', salt, boot: BOOT, history: lastMsgs.all(HISTORY), count: onlineCount() }));
-  online();
+  ws.send(JSON.stringify({ type: 'hello', salt, boot: BOOT, history: lastMsgs.all(room, HISTORY), count: onlineCount(room) }));
+  online(room);
 
   ws.on('message', (raw) => {
     let m;
@@ -125,15 +135,15 @@ wss.on('connection', (ws, req) => {
       if (tokens < 1) { ws.send(JSON.stringify({ type: 'error', code: 'rate' })); return; }
       if (!isB64(m.iv, 24) || !isB64(m.ct, MAX_CT)) { ws.send(JSON.stringify({ type: 'error', code: 'invalid' })); return; }
       tokens -= 1;
-      const info = insertMsg.run(now, m.iv, m.ct);
-      if (info.lastInsertRowid % 500 === 0) prune.run();
+      const info = insertMsg.run(room, now, m.iv, m.ct);
+      if (info.lastInsertRowid % 200 === 0) prune.run(room, room);
       const out = { type: 'msg', id: Number(info.lastInsertRowid), ts: now, iv: m.iv, ct: m.ct };
-      broadcast(out);
+      broadcast(room, out);
     } else if (m.type === 'typing') {
       if (now - lastTyping < 2000) return;
       if (!isB64(m.iv, 24) || !isB64(m.ct, 400)) return;
       lastTyping = now;
-      broadcast({ type: 'typing', iv: m.iv, ct: m.ct }, ws);
+      broadcast(room, { type: 'typing', iv: m.iv, ct: m.ct }, ws);
     }
   });
 

@@ -53,6 +53,13 @@
     const fp = Array.from(bits.slice(32, 34), b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
     return { key, fp };
   }
+  // Room id: SEPARATE one-way derivation (own fixed label as salt). It tells the server
+  // which room to use, but reveals nothing about the encryption key.
+  async function deriveRoomId(pass) {
+    const base = await crypto.subtle.importKey('raw', enc.encode(pass.normalize('NFC')), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: enc.encode('VIZARD/room-id/v1'), iterations: 200000, hash: 'SHA-256' }, base, 128);
+    return Array.from(new Uint8Array(bits), b => b.toString(16).padStart(2, '0')).join('');
+  }
   async function seal(obj) {
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, state.key, enc.encode(JSON.stringify(obj)));
@@ -102,7 +109,8 @@
     $('joinBtn').disabled = true; $('joinBtn').textContent = 'Подключение…';
     $('join').hidden = true; $('chat').hidden = false;
     $('me').textContent = nick;
-    connect();
+    setConn('connecting', '');
+    deriveRoomId(pass).then((r) => { state.room = r; connect(); });
     setTimeout(() => { if (!matchMedia('(hover:none)').matches) $('input').focus(); }, 50);
     function showErr(t) { err.textContent = t; err.hidden = false; }
   });
@@ -122,10 +130,10 @@
   // Exactly one socket per tab: never open a new one while one is connecting/open.
   function connect() {
     clearTimeout(reconnectTimer); reconnectTimer = null;
-    if (!state.nick || state.paused) return;
+    if (!state.nick || !state.room || state.paused) return;
     if (state.ws && state.ws.readyState <= 1) return;
     setConn('connecting', 'соединение');
-    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?cid=' + cid + '&tid=' + tid);
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?room=' + state.room + '&cid=' + cid + '&tid=' + tid);
     state.ws = ws;
     ws.onopen = () => { if (state.ws !== ws) return; state.retry = 0; startHeartbeat(); };
     ws.onmessage = (ev) => {
@@ -196,7 +204,7 @@
         setConn('connecting', 'ключ…');
         const { key, fp } = await deriveKey(state.pass, m.salt);
         state.key = key; state.keySalt = m.salt;
-        $('fp').textContent = fp; $('fp').title = 'Отпечаток ключа. У всех, кто ввёл ту же фразу, он одинаковый.';
+        $('fp').textContent = fp; $('fp').title = 'Отпечаток комнаты — у всех с тем же ключом он одинаковый';
       }
       state.salt = m.salt;
       if (state.boot !== m.boot) {
@@ -209,7 +217,7 @@
       for (const h of m.history) await addMessage(h, false);
       updateEmpty();
       checkKey();
-      setConn('open', m.count + ' онлайн');
+      setConn('open', m.count + ' в сети');
       updateSend();
       if (nb || m.history.length) toBottom();
     } else if (m.type === 'msg') {
@@ -219,7 +227,7 @@
     } else if (m.type === 'pong') {
       // heartbeat reply
     } else if (m.type === 'online') {
-      if (state.key) setConn('open', m.count + ' онлайн');
+      if (state.key) setConn('open', m.count + ' в сети');
     } else if (m.type === 'typing') {
       const o = await open(m.iv, m.ct);
       if (o && typeof o.n === 'string' && o.c !== cid) { state.typers.set(o.n.slice(0, 24), Date.now()); renderTyping(); }
@@ -302,7 +310,7 @@
   function checkKey() {
     const w = $('warn');
     if (state.failCount > 0 && state.okCount === 0) {
-      w.textContent = 'Похоже, ваш ключ не совпадает с ключом остальных участников: их сообщения не расшифровываются. Сравните отпечаток ключа рядом с «e2e» с собеседником; если отличается — нажмите «выйти» и введите фразу заново.';
+      w.textContent = 'Похоже, ваш ключ не совпадает с ключом остальных участников: их сообщения не расшифровываются. Нажмите «выйти» и введите ключ заново.';
       w.hidden = false;
     } else w.hidden = true;
   }
@@ -340,7 +348,7 @@
   function autosize() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 180) + 'px'; }
   function updateSend() {
     const len = input.value.length;
-    $('counter').textContent = `${len} / ${MAX_LEN}`;
+    $('counter').textContent = `${len} / ${MAX_LEN}`; $('counter').hidden = len < MAX_LEN - 200;
     $('sendBtn').disabled = !input.value.trim() || !state.key || !state.ws || state.ws.readyState !== 1;
   }
   let lastTypingSent = 0;

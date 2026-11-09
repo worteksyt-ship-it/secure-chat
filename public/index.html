@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#0a0a0a">
 <meta name="color-scheme" content="dark">
+<meta name="description" content="VIZARD — чат со сквозным шифрованием. Ключ — это комната.">
 <title>VIZARD</title>
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
@@ -20,79 +21,71 @@
 <div id="app">
 
   <section id="join" class="join">
-    <div class="join-inner">
-      <img class="mark mark-lg" src="/logo.svg" alt="" width="56" height="56">
-      <p class="eyebrow">канал&nbsp;/&nbsp;общий</p>
-      <h1 class="wordmark">VIZARD</h1>
-      <p class="lead">Одна комната для всех, у кого есть ключ.</p>
+    <header class="top">
+      <span class="brand"><img class="mark" src="/logo.svg" alt="" width="18" height="18"><span class="word">VIZARD</span></span>
+    </header>
 
-      <form id="joinForm" autocomplete="off" novalidate>
+    <div class="join-body">
+      <h1>Ключ — это ваша комната.</h1>
+      <p class="lead">У кого тот же ключ — те в одном чате. Сообщения шифруются на вашем устройстве, сервер видит только шифротекст.</p>
+
+      <form id="joinForm" class="form" autocomplete="off" novalidate>
         <label class="field">
-          <span>Никнейм</span>
-          <input id="nick" name="nick" type="text" maxlength="24" placeholder="как вас подписывать" required autocapitalize="off" spellcheck="false">
+          <span>Имя</span>
+          <input id="nick" name="nick" type="text" maxlength="24" required autocapitalize="off" spellcheck="false">
         </label>
         <label class="field">
-          <span>Ключ комнаты</span>
-          <input id="pass" name="pass" type="password" maxlength="200" placeholder="общая фраза-пароль" required autocomplete="new-password">
+          <span>Ключ</span>
+          <input id="pass" name="pass" type="password" maxlength="200" required autocomplete="new-password">
         </label>
         <label class="check">
           <input id="remember" type="checkbox">
           <span>Запомнить на этом устройстве</span>
         </label>
         <p id="joinError" class="error" role="alert" hidden></p>
-        <button id="joinBtn" type="submit" class="btn">Войти</button>
+        <div class="actions">
+          <button id="joinBtn" type="submit" class="btn">Войти</button>
+          <span id="install" class="install" hidden>
+            <button id="installBtn" type="button" class="link" hidden>Установить приложение</button>
+            <span id="iosHint" class="hint" hidden>Поделиться → На экран «Домой»</span>
+          </span>
+        </div>
       </form>
 
-      <div id="install" class="install" hidden>
-        <button id="installBtn" type="button" class="btn-ghost" hidden>Установить приложение</button>
-        <p id="iosHint" class="install-hint mono" hidden>Установить: Поделиться → На экран «Домой»</p>
-      </div>
-
-      <div class="note">
-        <p class="note-title">Как это работает</p>
-        <p>Сообщения шифруются прямо в браузере ключом комнаты (AES-256-GCM, ключ выводится через PBKDF2). Сервер хранит и пересылает только шифротекст и не знает ключа.</p>
-        <p>Читать переписку могут только те, кто ввёл ту же фразу. Передайте её собеседникам лично — восстановить её нельзя.</p>
-      </div>
+      <p class="fine">Ключ не хранится на сервере и не восстанавливается. Передавайте его лично.</p>
     </div>
   </section>
 
   <section id="chat" class="chat" hidden>
-    <header class="bar">
-      <div class="bar-left">
-        <img id="markBar" class="mark mark-sm" src="/logo.svg" alt="" width="20" height="20">
-        <span class="title wordmark-sm">VIZARD</span>
-        <span class="sep">/</span>
-        <span id="me" class="mono dim"></span>
-      </div>
-      <div class="bar-right mono">
-        <span id="conn" class="conn" data-state="connecting"><i></i><b id="connText">соединение</b></span>
-        <span class="e2e" title="Сквозное шифрование: AES-256-GCM. Справа — отпечаток ключа: у всех, кто ввёл ту же фразу, он одинаковый.">e2e <b id="fp">····</b></span>
+    <header class="top bar">
+      <span class="brand"><img id="markBar" class="mark" src="/logo.svg" alt="" width="18" height="18"><span class="word">VIZARD</span></span>
+      <span class="meta">
+        <span class="room" title="Отпечаток комнаты">#<b id="fp">····</b></span>
+        <span id="conn" class="conn" data-state="connecting"><i></i><b id="connText"></b></span>
+        <span id="me" class="me"></span>
         <button id="installBar" class="link" type="button" hidden>установить</button>
         <button id="leave" class="link" type="button">выйти</button>
-      </div>
+      </span>
     </header>
 
     <div id="warn" class="warn" hidden></div>
 
     <main id="scroller" class="scroller">
       <ol id="list" class="list" aria-live="polite"></ol>
-      <div id="empty" class="empty" hidden>
-        <p>Здесь пока тихо.</p>
-        <p class="dim">Напишите первое сообщение.</p>
-      </div>
+      <div id="empty" class="empty" hidden>Пусто. Напишите первым.</div>
     </main>
 
-    <button id="jump" class="jump mono" type="button" hidden>новые сообщения ↓</button>
+    <button id="jump" class="jump" type="button" hidden>Новые ↓</button>
 
     <footer class="composer">
-      <div id="typing" class="typing mono dim"></div>
+      <div id="typing" class="typing"></div>
       <form id="sendForm" class="send">
-        <textarea id="input" rows="1" maxlength="2000" placeholder="Сообщение" enterkeyhint="send"></textarea>
-        <button id="sendBtn" class="btn btn-send" type="submit" aria-label="Отправить" disabled>
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 12h14M12 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"/></svg>
+        <textarea id="input" rows="1" maxlength="2000" placeholder="Сообщение" enterkeyhint="send" aria-label="Сообщение"></textarea>
+        <button id="sendBtn" class="send-btn" type="submit" aria-label="Отправить" disabled>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
         </button>
       </form>
-      <div class="hint mono dim"><span id="counter">0 / 2000</span><span class="desk">Enter — отправить, Shift+Enter — новая строка</span></div>
+      <div id="counter" class="counter" hidden></div>
     </footer>
   </section>
 
