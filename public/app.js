@@ -4,6 +4,14 @@
   const enc = new TextEncoder(), dec = new TextDecoder();
   const MAX_LEN = 2000;
   const ITER = 310000;
+  const PROTO = '2';
+  function forceReload() {
+    // reload at most once per minute to avoid loops
+    const last = +sessionStorage.getItem('chat.reloadAt') || 0;
+    if (Date.now() - last < 60000) return false;
+    sessionStorage.setItem('chat.reloadAt', String(Date.now()));
+    location.reload(); return true;
+  }
 
   const state = {
     nick: '', pass: '', key: null, keySalt: null, salt: null, boot: null, ws: null, retry: 0, paused: false,
@@ -20,7 +28,15 @@
   if (!/^[a-f0-9]{8,32}$/.test(tid || '')) { tid = rndId(); sessionStorage.setItem('chat.tid', tid); }
 
   // ---------- PWA ----------
-  if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {}));
+  if ('serviceWorker' in navigator) {
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    // when a new service worker takes over, reload once so page + server versions match
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloading) { reloading = true; location.reload(); } });
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })
+      .then((reg) => { reg.update().catch(() => {}); document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); }); })
+      .catch(() => {}));
+  }
   const standalone = matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: window-controls-overlay)').matches || navigator.standalone === true;
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   let installEvt = null;
@@ -110,7 +126,8 @@
     $('join').hidden = true; $('chat').hidden = false;
     $('me').textContent = nick;
     setConn('connecting', '');
-    deriveRoomId(pass).then((r) => { state.room = r; connect(); });
+    deriveRoomId(pass).then((r) => { state.room = r; connect(); })
+      .catch(() => { setConn('closed', 'ошибка шифрования — обновите страницу'); });
     setTimeout(() => { if (!matchMedia('(hover:none)').matches) $('input').focus(); }, 50);
     function showErr(t) { err.textContent = t; err.hidden = false; }
   });
@@ -133,8 +150,16 @@
     if (!state.nick || !state.room || state.paused) return;
     if (state.ws && state.ws.readyState <= 1) return;
     setConn('connecting', 'соединение');
-    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?room=' + state.room + '&cid=' + cid + '&tid=' + tid);
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?v=' + PROTO + '&room=' + state.room + '&cid=' + cid + '&tid=' + tid);
     state.ws = ws;
+    // connection timeout: no 'hello' within 10 s -> drop and retry (never spin forever)
+    clearTimeout(state.connTimer);
+    state.connTimer = setTimeout(() => {
+      if (state.ws !== ws || state.gotHello) return;
+      closeSocket(); state.fails = (state.fails || 0) + 1;
+      setConn('closed', 'нет ответа, повтор…'); scheduleReconnect();
+    }, 10000);
+    state.gotHello = false;
     ws.onopen = () => { if (state.ws !== ws) return; state.retry = 0; startHeartbeat(); };
     ws.onmessage = (ev) => {
       if (state.ws !== ws) return;
@@ -142,10 +167,12 @@
       let m; try { m = JSON.parse(ev.data); } catch { return; }
       handle(m);
     };
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
+      clearTimeout(state.connTimer);
       if (state.ws !== ws) return;
+      if (ev.code === 4001 && forceReload()) return;
       state.ws = null; stopHeartbeat();
-      setConn('closed', 'нет связи');
+      setConn('closed', 'нет связи, повтор…');
       $('sendBtn').disabled = true;
       scheduleReconnect();
     };
@@ -198,7 +225,9 @@
   }
 
   async function process(m) {
+    if (m.type === 'reload' || (m.type === 'error' && m.code === 'proto')) { forceReload(); return; }
     if (m.type === 'hello') {
+      state.gotHello = true; state.fails = 0; clearTimeout(state.connTimer);
       if (!state.key || state.keySalt !== m.salt) {
         state.key = null; state.keySalt = null; updateSend(); // never encrypt with a key for another salt
         setConn('connecting', 'ключ…');

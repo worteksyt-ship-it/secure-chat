@@ -105,5 +105,5 @@ h1{font-size:28px;line-height:1.15;letter-spacing:-.02em;font-weight:650;margin:
 }
 @media (display-mode: standalone), (display-mode: window-controls-overlay){ .install, #installBar{display:none !important} }
 /* graffiti wordmark */
-.wm-lg{display:block;width:min(320px,78vw);height:auto;margin:0 0 28px -6px}
+.wm-lg{display:block;width:min(320px,78vw);height:auto;margin:0 0 40px -6px}
 .wm-sm{display:block;height:24px;width:auto}

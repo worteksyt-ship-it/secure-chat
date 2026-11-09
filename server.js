@@ -39,6 +39,7 @@ const insertMsg = db.prepare('INSERT INTO messages (room, ts, iv, ct) VALUES (?,
 const lastMsgs = db.prepare('SELECT id, ts, iv, ct FROM (SELECT * FROM messages WHERE room = ? ORDER BY id DESC LIMIT ?) ORDER BY id ASC');
 const prune = db.prepare('DELETE FROM messages WHERE room = ? AND id <= (SELECT id FROM messages WHERE room = ? ORDER BY id DESC LIMIT 1 OFFSET 2000)');
 const roomRe = /^[a-f0-9]{32}$/;
+const PROTO = '2';
 
 // ---------- http ----------
 const app = express();
@@ -96,7 +97,11 @@ wss.on('connection', (ws, req) => {
   const tid = idRe.test(q.get('tid') || '') ? q.get('tid') : crypto.randomBytes(9).toString('hex');
   ws.cid = cid;
   const room = q.get('room');
-  if (!roomRe.test(room || '')) { ws.close(4001, 'room required'); return; }
+  if (!roomRe.test(room || '') || q.get('v') !== PROTO) {
+    // Old/cached client: tell it to reload itself instead of silently looping.
+    try { ws.send(JSON.stringify({ type: 'reload', reason: 'protocol', proto: PROTO })); } catch {}
+    ws.close(4001, 'reload required'); return;
+  }
   ws.room = room;
   const tabKey = cid + ':' + tid;
   ipCount.set(ip, (ipCount.get(ip) || 0) + 1);
@@ -144,6 +149,8 @@ wss.on('connection', (ws, req) => {
       if (!isB64(m.iv, 24) || !isB64(m.ct, 400)) return;
       lastTyping = now;
       broadcast(room, { type: 'typing', iv: m.iv, ct: m.ct }, ws);
+    } else {
+      ws.send(JSON.stringify({ type: 'error', code: 'proto', proto: PROTO }));
     }
   });
 
