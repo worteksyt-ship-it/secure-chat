@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="color-scheme" content="dark">
+<title>Общий чат</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <section id="join" class="join">
+    <div class="join-inner">
+      <p class="eyebrow">канал&nbsp;/&nbsp;общий</p>
+      <h1>Общий чат.</h1>
+      <p class="lead">Одна комната для всех, у кого есть ключ.</p>
+
+      <form id="joinForm" autocomplete="off" novalidate>
+        <label class="field">
+          <span>Никнейм</span>
+          <input id="nick" name="nick" type="text" maxlength="24" placeholder="как вас подписывать" required autocapitalize="off" spellcheck="false">
+        </label>
+        <label class="field">
+          <span>Ключ комнаты</span>
+          <input id="pass" name="pass" type="password" maxlength="200" placeholder="общая фраза-пароль" required autocomplete="new-password">
+        </label>
+        <label class="check">
+          <input id="remember" type="checkbox">
+          <span>Запомнить на этом устройстве</span>
+        </label>
+        <p id="joinError" class="error" role="alert" hidden></p>
+        <button id="joinBtn" type="submit" class="btn">Войти</button>
+      </form>
+
+      <div class="note">
+        <p class="note-title">Как это работает</p>
+        <p>Сообщения шифруются прямо в браузере ключом комнаты (AES-256-GCM, ключ выводится через PBKDF2). Сервер хранит и пересылает только шифротекст и не знает ключа.</p>
+        <p>Читать переписку могут только те, кто ввёл ту же фразу. Передайте её собеседникам лично — восстановить её нельзя.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="chat" class="chat" hidden>
+    <header class="bar">
+      <div class="bar-left">
+        <span class="title">Общий чат</span>
+        <span class="sep">/</span>
+        <span id="me" class="mono dim"></span>
+      </div>
+      <div class="bar-right mono">
+        <span id="conn" class="conn" data-state="connecting"><i></i><b id="connText">соединение</b></span>
+        <span class="e2e" title="Сквозное шифрование: AES-256-GCM">e2e</span>
+        <button id="leave" class="link" type="button">выйти</button>
+      </div>
+    </header>
+
+    <div id="warn" class="warn" hidden></div>
+
+    <main id="scroller" class="scroller">
+      <ol id="list" class="list" aria-live="polite"></ol>
+      <div id="empty" class="empty" hidden>
+        <p>Здесь пока тихо.</p>
+        <p class="dim">Напишите первое сообщение.</p>
+      </div>
+    </main>
+
+    <button id="jump" class="jump mono" type="button" hidden>новые сообщения ↓</button>
+
+    <footer class="composer">
+      <div id="typing" class="typing mono dim"></div>
+      <form id="sendForm" class="send">
+        <textarea id="input" rows="1" maxlength="2000" placeholder="Сообщение" enterkeyhint="send"></textarea>
+        <button id="sendBtn" class="btn btn-send" type="submit" aria-label="Отправить" disabled>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 12h14M12 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"/></svg>
+        </button>
+      </form>
+      <div class="hint mono dim"><span id="counter">0 / 2000</span><span class="desk">Enter — отправить, Shift+Enter — новая строка</span></div>
+    </footer>
+  </section>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
