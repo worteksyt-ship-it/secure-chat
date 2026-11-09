@@ -25,7 +25,6 @@ button,input,textarea{font:inherit;color:inherit}
   padding:calc(var(--pad) + env(safe-area-inset-top)) calc(var(--pad) + env(safe-area-inset-right)) calc(var(--pad) + env(safe-area-inset-bottom)) calc(var(--pad) + env(safe-area-inset-left))}
 .join-inner{width:100%;max-width:420px;margin:auto}
 .eyebrow{font-family:var(--mono);font-size:12px;color:var(--fg-3);margin:0 0 28px;text-transform:lowercase}
-.eyebrow::before{content:"";display:inline-block;width:7px;height:7px;background:var(--accent);margin-right:10px;vertical-align:1px}
 h1{font-size:clamp(40px,8vw,56px);line-height:1;letter-spacing:-.035em;font-weight:600;margin:0 0 12px}
 .lead{color:var(--fg-2);margin:0 0 36px}
 .field{display:block;margin-bottom:18px}
@@ -109,9 +108,21 @@ h1{font-size:clamp(40px,8vw,56px);line-height:1;letter-spacing:-.035em;font-weig
   .msg .time{display:none}
   .msg .head .t{display:inline}
   .bar-right{gap:12px}
-  .e2e{display:none}
+  .e2e{padding:1px 5px}
   .hint{display:none}
   .composer{padding-top:4px}
 }
 @media (hover:none){ .msg .time{opacity:1} }
 @media (prefers-reduced-motion:reduce){*{transition:none !important}}
+
+/* ---------- logo ---------- */
+.mark{display:block;flex:none}
+.mark-lg{width:56px;height:56px;margin:0 0 26px -4px;animation:mark-in .9s cubic-bezier(.2,.7,.2,1) both}
+.mark-sm{width:20px;height:20px;align-self:center;transition:transform .6s ease}
+.bar-left{align-items:center}
+.chat[data-conn="connecting"] .mark-sm{animation:mark-spin 2.4s linear infinite}
+.chat[data-conn="closed"] .mark-sm{opacity:.45;filter:grayscale(1)}
+.e2e b{font-weight:400;color:var(--fg)}
+@keyframes mark-spin{to{transform:rotate(360deg)}}
+@keyframes mark-in{from{opacity:0;transform:rotate(-40deg) scale(.85)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.mark{animation:none !important}}

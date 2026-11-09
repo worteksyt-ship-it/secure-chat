@@ -6,23 +6,32 @@
   const ITER = 310000;
 
   const state = {
-    nick: '', pass: '', key: null, salt: null, ws: null, retry: 0,
+    nick: '', pass: '', key: null, keySalt: null, salt: null, boot: null, ws: null, retry: 0, paused: false,
     lastAuthor: null, lastTs: 0, lastDay: '', seen: new Set(),
     okCount: 0, failCount: 0, typers: new Map(), timer: null,
   };
 
   // client id to recognize own messages
   let cid = localStorage.getItem('chat.cid');
-  if (!cid) { cid = Array.from(crypto.getRandomValues(new Uint8Array(9)), b => b.toString(16).padStart(2, '0')).join(''); localStorage.setItem('chat.cid', cid); }
+  const rndId = () => Array.from(crypto.getRandomValues(new Uint8Array(9)), b => b.toString(16).padStart(2, '0')).join('');
+  if (!/^[a-f0-9]{8,32}$/.test(cid || '')) { cid = rndId(); localStorage.setItem('chat.cid', cid); }
+  // per-tab id (survives reloads of the same tab) so the server can replace this tab's stale socket
+  let tid = sessionStorage.getItem('chat.tid');
+  if (!/^[a-f0-9]{8,32}$/.test(tid || '')) { tid = rndId(); sessionStorage.setItem('chat.tid', tid); }
 
   // ---------- crypto ----------
   const b64 = (buf) => { let s = ''; const a = new Uint8Array(buf); for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]); return btoa(s); };
   const unb64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
+  // Key is always derived fresh from (passphrase, salt sent by server in 'hello').
+  // Nothing derived is cached across page loads. Returns key + short fingerprint
+  // (from extra PBKDF2 output bits, not from the key itself) so people can compare.
   async function deriveKey(pass, salt) {
-    const base = await crypto.subtle.importKey('raw', enc.encode(pass.normalize('NFC')), 'PBKDF2', false, ['deriveKey']);
-    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: unb64(salt), iterations: ITER, hash: 'SHA-256' },
-      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    const base = await crypto.subtle.importKey('raw', enc.encode(pass.normalize('NFC')), 'PBKDF2', false, ['deriveBits']);
+    const bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: unb64(salt), iterations: ITER, hash: 'SHA-256' }, base, 288));
+    const key = await crypto.subtle.importKey('raw', bits.slice(0, 32), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+    const fp = Array.from(bits.slice(32, 34), b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+    return { key, fp };
   }
   async function seal(obj) {
     const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -61,7 +70,7 @@
   $('joinForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const nick = $('nick').value.trim().replace(/\s+/g, ' ');
-    const pass = $('pass').value;
+    const pass = $('pass').value.trim(); // mobile keyboards often add a trailing space
     const err = $('joinError');
     err.hidden = true;
     if (!window.crypto || !crypto.subtle) { showErr('Браузер не поддерживает шифрование (нужен HTTPS).'); return; }
@@ -80,28 +89,78 @@
 
   $('leave').addEventListener('click', () => {
     localStorage.removeItem('chat.pass');
+    closeSocket();
     location.reload();
   });
 
   // ---------- socket ----------
-  function setConn(s, text) { $('conn').dataset.state = s; $('connText').textContent = text; }
+  function setConn(s, text) { $('conn').dataset.state = s; $('chat').dataset.conn = s; $('connText').textContent = text; }
 
+  let reconnectTimer = null, hbTimer = null, pongTimer = null, hideTimer = null;
+  const touch = matchMedia('(hover:none)').matches;
+
+  // Exactly one socket per tab: never open a new one while one is connecting/open.
   function connect() {
+    clearTimeout(reconnectTimer); reconnectTimer = null;
+    if (!state.nick || state.paused) return;
+    if (state.ws && state.ws.readyState <= 1) return;
     setConn('connecting', 'соединение');
-    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?cid=' + cid + '&tid=' + tid);
     state.ws = ws;
-    ws.onopen = () => { state.retry = 0; };
-    ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; } handle(m); };
+    ws.onopen = () => { if (state.ws !== ws) return; state.retry = 0; startHeartbeat(); };
+    ws.onmessage = (ev) => {
+      if (state.ws !== ws) return;
+      clearTimeout(pongTimer); pongTimer = null;
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      handle(m);
+    };
     ws.onclose = () => {
       if (state.ws !== ws) return;
+      state.ws = null; stopHeartbeat();
       setConn('closed', 'нет связи');
       $('sendBtn').disabled = true;
-      const delay = Math.min(15000, 600 * 2 ** state.retry++) + Math.random() * 400;
-      setTimeout(connect, delay);
+      scheduleReconnect();
     };
   }
+  function scheduleReconnect() {
+    if (reconnectTimer || state.paused) return;
+    const delay = Math.min(15000, 600 * 2 ** state.retry++) + Math.random() * 400;
+    reconnectTimer = setTimeout(connect, delay);
+  }
+  function closeSocket() {
+    clearTimeout(reconnectTimer); reconnectTimer = null; stopHeartbeat();
+    const ws = state.ws; state.ws = null;
+    if (ws) { ws.onclose = ws.onmessage = ws.onopen = null; try { ws.close(1000, 'bye'); } catch {} }
+  }
+  // App-level heartbeat: detects sockets that died silently (phone sleep, network switch).
+  function startHeartbeat() {
+    stopHeartbeat();
+    hbTimer = setInterval(probe, 20000);
+  }
+  function stopHeartbeat() { clearInterval(hbTimer); clearTimeout(pongTimer); hbTimer = pongTimer = null; }
+  function probe() {
+    const ws = state.ws;
+    if (!ws || ws.readyState !== 1 || pongTimer) return;
+    try { ws.send('{"type":"ping"}'); } catch {}
+    pongTimer = setTimeout(() => { pongTimer = null; if (state.ws === ws) { closeSocket(); setConn('closed', 'нет связи'); connect(); } }, 6000);
+  }
+  function resume() {
+    clearTimeout(hideTimer); hideTimer = null;
+    state.paused = false;
+    if (!state.nick) return;
+    if (state.ws && state.ws.readyState === 1) probe();
+    else if (!state.ws || state.ws.readyState > 1) { state.retry = 0; connect(); }
+  }
+  window.addEventListener('pagehide', () => { state.paused = true; closeSocket(); });
+  window.addEventListener('pageshow', resume);
+  window.addEventListener('online', resume);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && state.ws && state.ws.readyState > 1 && state.nick) { state.retry = 0; connect(); }
+    if (document.visibilityState === 'visible') resume();
+    else if (touch && state.nick) {
+      // Phones freeze background tabs; leave cleanly instead of becoming a ghost.
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => { if (document.visibilityState === 'hidden') { state.paused = true; closeSocket(); } }, 3000);
+    }
   });
 
   let queue = Promise.resolve();
@@ -112,10 +171,19 @@
 
   async function process(m) {
     if (m.type === 'hello') {
-      if (!state.key || state.salt !== m.salt) {
+      if (!state.key || state.keySalt !== m.salt) {
+        state.key = null; state.keySalt = null; updateSend(); // never encrypt with a key for another salt
         setConn('connecting', 'ключ…');
-        state.salt = m.salt;
-        state.key = await deriveKey(state.pass, m.salt);
+        const { key, fp } = await deriveKey(state.pass, m.salt);
+        state.key = key; state.keySalt = m.salt;
+        $('fp').textContent = fp; $('fp').title = 'Отпечаток ключа. У всех, кто ввёл ту же фразу, он одинаковый.';
+      }
+      state.salt = m.salt;
+      if (state.boot !== m.boot) {
+        // server restarted (ids start over, DB may be empty): rebuild the list from scratch
+        state.boot = m.boot;
+        list.textContent = ''; state.seen.clear();
+        state.lastAuthor = null; state.lastTs = 0; state.lastDay = ''; state.okCount = 0; state.failCount = 0;
       }
       const nb = nearBottom();
       for (const h of m.history) await addMessage(h, false);
@@ -128,6 +196,8 @@
       await addMessage(m, true);
       updateEmpty();
       checkKey();
+    } else if (m.type === 'pong') {
+      // heartbeat reply
     } else if (m.type === 'online') {
       if (state.key) setConn('open', m.count + ' онлайн');
     } else if (m.type === 'typing') {
@@ -212,7 +282,7 @@
   function checkKey() {
     const w = $('warn');
     if (state.failCount > 0 && state.okCount === 0) {
-      w.textContent = 'Похоже, ваш ключ не совпадает с ключом остальных участников: их сообщения не расшифровываются. Проверьте фразу — нажмите «выйти» и введите её заново.';
+      w.textContent = 'Похоже, ваш ключ не совпадает с ключом остальных участников: их сообщения не расшифровываются. Сравните отпечаток ключа рядом с «e2e» с собеседником; если отличается — нажмите «выйти» и введите фразу заново.';
       w.hidden = false;
     } else w.hidden = true;
   }
@@ -245,7 +315,6 @@
 
   // ---------- composer ----------
   const input = $('input');
-  const touch = matchMedia('(hover:none)').matches;
   if (touch) input.setAttribute('enterkeyhint', 'enter');
 
   function autosize() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 180) + 'px'; }
@@ -270,9 +339,10 @@
   $('sendForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const t = input.value.replace(/\s+$/, '').replace(/^\n+/, '');
-    if (!t.trim() || !state.key || state.ws?.readyState !== 1) return;
+    if (!t.trim() || !state.key || state.keySalt !== state.salt || state.ws?.readyState !== 1) return;
     if (t.length > MAX_LEN) { flash('Слишком длинное сообщение.'); return; }
     const p = await seal({ n: state.nick, t, c: cid });
+    if (state.ws?.readyState !== 1) return;
     state.ws.send(JSON.stringify({ type: 'msg', ...p }));
     input.value = ''; autosize(); updateSend(); lastTypingSent = 0;
     if (touch) input.focus();

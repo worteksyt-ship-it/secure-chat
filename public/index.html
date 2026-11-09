@@ -6,7 +6,14 @@
 <meta name="theme-color" content="#0a0a0a">
 <meta name="color-scheme" content="dark">
 <title>Общий чат</title>
-<link rel="icon" href="data:,">
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Чат">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,6 +21,7 @@
 
   <section id="join" class="join">
     <div class="join-inner">
+      <img class="mark mark-lg" src="/logo.svg" alt="" width="56" height="56">
       <p class="eyebrow">канал&nbsp;/&nbsp;общий</p>
       <h1>Общий чат.</h1>
       <p class="lead">Одна комната для всех, у кого есть ключ.</p>
@@ -46,13 +54,14 @@
   <section id="chat" class="chat" hidden>
     <header class="bar">
       <div class="bar-left">
+        <img id="markBar" class="mark mark-sm" src="/logo.svg" alt="" width="20" height="20">
         <span class="title">Общий чат</span>
         <span class="sep">/</span>
         <span id="me" class="mono dim"></span>
       </div>
       <div class="bar-right mono">
         <span id="conn" class="conn" data-state="connecting"><i></i><b id="connText">соединение</b></span>
-        <span class="e2e" title="Сквозное шифрование: AES-256-GCM">e2e</span>
+        <span class="e2e" title="Сквозное шифрование: AES-256-GCM. Справа — отпечаток ключа: у всех, кто ввёл ту же фразу, он одинаковый.">e2e <b id="fp">····</b></span>
         <button id="leave" class="link" type="button">выйти</button>
       </div>
     </header>
