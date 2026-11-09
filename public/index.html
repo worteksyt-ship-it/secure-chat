@@ -12,7 +12,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VIZARD">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -43,6 +43,11 @@
         <button id="joinBtn" type="submit" class="btn">Войти</button>
       </form>
 
+      <div id="install" class="install" hidden>
+        <button id="installBtn" type="button" class="btn-ghost" hidden>Установить приложение</button>
+        <p id="iosHint" class="install-hint mono" hidden>Установить: Поделиться → На экран «Домой»</p>
+      </div>
+
       <div class="note">
         <p class="note-title">Как это работает</p>
         <p>Сообщения шифруются прямо в браузере ключом комнаты (AES-256-GCM, ключ выводится через PBKDF2). Сервер хранит и пересылает только шифротекст и не знает ключа.</p>
@@ -62,6 +67,7 @@
       <div class="bar-right mono">
         <span id="conn" class="conn" data-state="connecting"><i></i><b id="connText">соединение</b></span>
         <span class="e2e" title="Сквозное шифрование: AES-256-GCM. Справа — отпечаток ключа: у всех, кто ввёл ту же фразу, он одинаковый.">e2e <b id="fp">····</b></span>
+        <button id="installBar" class="link" type="button" hidden>установить</button>
         <button id="leave" class="link" type="button">выйти</button>
       </div>
     </header>

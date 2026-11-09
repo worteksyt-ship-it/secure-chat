@@ -19,6 +19,26 @@
   let tid = sessionStorage.getItem('chat.tid');
   if (!/^[a-f0-9]{8,32}$/.test(tid || '')) { tid = rndId(); sessionStorage.setItem('chat.tid', tid); }
 
+  // ---------- PWA ----------
+  if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {}));
+  const standalone = matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: window-controls-overlay)').matches || navigator.standalone === true;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  let installEvt = null;
+  function showInstall(on) {
+    $('install').hidden = !on; $('installBtn').hidden = !installEvt; $('installBar').hidden = !installEvt;
+    $('iosHint').hidden = !(on && isIOS && !installEvt);
+  }
+  if (!standalone && isIOS) showInstall(true);
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; if (!standalone) showInstall(true); });
+  window.addEventListener('appinstalled', () => { installEvt = null; showInstall(false); });
+  async function doInstall() {
+    if (!installEvt) return;
+    installEvt.prompt();
+    try { await installEvt.userChoice; } catch {}
+    installEvt = null; showInstall(false);
+  }
+  document.addEventListener('click', (e) => { if (e.target.id === 'installBtn' || e.target.id === 'installBar') doInstall(); });
+
   // ---------- crypto ----------
   const b64 = (buf) => { let s = ''; const a = new Uint8Array(buf); for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]); return btoa(s); };
   const unb64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));

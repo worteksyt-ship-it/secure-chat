@@ -39,13 +39,14 @@ app.disable('x-powered-by');
 app.set('trust proxy', true);
 app.use((req, res, next) => {
   res.set({
-    'Content-Security-Policy': "default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+    'Content-Security-Policy': "default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
     'X-Frame-Options': 'DENY',
   });
   next();
 });
+app.get('/sw.js', (req, res, next) => { res.set({ 'Service-Worker-Allowed': '/', 'Cache-Control': 'no-cache' }); next(); });
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, index: 'index.html' }));
 app.get('/health', (_req, res) => res.json({ ok: true }));
 

@@ -129,3 +129,9 @@ h1{font-size:clamp(40px,8vw,56px);line-height:1;letter-spacing:-.035em;font-weig
 /* ---------- wordmark ---------- */
 .wordmark{font-size:clamp(40px,9vw,60px);letter-spacing:.14em;font-weight:600;text-transform:uppercase;margin-right:-.14em}
 .wordmark-sm{letter-spacing:.22em;font-size:13px;text-transform:uppercase;font-weight:600}
+/* ---------- install ---------- */
+.install{margin-top:16px}
+.btn-ghost{width:100%;appearance:none;background:transparent;border:1px solid var(--line-2);color:var(--fg-2);padding:11px 16px;border-radius:2px;cursor:pointer;font-size:14px;transition:border-color .15s,color .15s}
+.btn-ghost:hover{border-color:var(--fg-2);color:var(--fg)}
+.install-hint{margin:0;color:var(--fg-3);text-align:center}
+@media (display-mode: standalone), (display-mode: window-controls-overlay){ .install, #installBar{display:none !important} }
