@@ -1,6 +1,6 @@
 {
-  "name": "Общий чат",
-  "short_name": "Чат",
+  "name": "VIZARD — общий чат",
+  "short_name": "VIZARD",
   "lang": "ru",
   "start_url": "/",
   "display": "standalone",
