@@ -33,10 +33,17 @@
           <span>Имя</span>
           <input id="nick" name="nick" type="text" maxlength="24" required autocapitalize="off" spellcheck="false">
         </label>
-        <label class="field">
-          <span>Ключ</span>
-          <input id="pass" name="pass" type="password" maxlength="200" required autocomplete="new-password">
-        </label>
+        <p id="inviteNote" class="note" hidden>Вас пригласили в комнату. Введите имя и войдите.</p>
+        <div class="field">
+          <span class="lbl">Ключ
+            <span class="lbl-actions">
+              <button id="genKey" type="button" class="link">создать новый</button>
+              <button id="showKey" type="button" class="link">показать</button>
+            </span>
+          </span>
+          <input id="pass" name="pass" type="password" maxlength="200" required autocomplete="new-password" aria-label="Ключ" spellcheck="false" autocapitalize="off">
+          <p id="keyHint" class="hint key-hint" hidden></p>
+        </div>
         <label class="check">
           <input id="remember" type="checkbox">
           <span>Запомнить на этом устройстве</span>
@@ -58,7 +65,7 @@
     <header class="top bar">
       <span class="brand"><img id="markBar" class="mark" src="/logo.svg" alt="" width="18" height="18"><img class="wm-sm" src="/wordmark.svg" alt="VIZARD" width="74" height="26"></span>
       <span class="meta">
-        <span class="room" title="Отпечаток комнаты">#<b id="fp">····</b></span>
+        <button id="roomBtn" class="room" type="button" title="Комната: ссылка-приглашение, удаление">#<b id="fp">····</b> ▾</button>
         <span id="conn" class="conn" data-state="connecting"><i></i><b id="connText"></b></span>
         <span id="me" class="me"></span>
         <button id="installBar" class="link" type="button" hidden>установить</button>
@@ -77,8 +84,23 @@
 
     <footer class="composer">
       <div id="typing" class="typing"></div>
+      <div id="recBar" class="rec" hidden>
+        <i class="rec-dot"></i><b id="recTime">0:00</b>
+        <span class="grow"></span>
+        <button id="recCancel" type="button" class="link">отмена</button>
+        <button id="recSend" type="button" class="send-btn" aria-label="Отправить голосовое">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+      </div>
       <form id="sendForm" class="send">
+        <button id="attachBtn" class="icon-btn" type="button" aria-label="Фото" disabled>
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="10.5" r="1.6" fill="currentColor"/><path d="M4 17l5-4.5 3.5 3L16 12l4 4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        </button>
+        <input id="file" type="file" accept="image/*" hidden>
         <textarea id="input" rows="1" maxlength="2000" placeholder="Сообщение" enterkeyhint="send" aria-label="Сообщение"></textarea>
+        <button id="micBtn" class="icon-btn" type="button" aria-label="Голосовое" disabled>
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        </button>
         <button id="sendBtn" class="send-btn" type="submit" aria-label="Отправить" disabled>
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
         </button>
@@ -88,6 +110,24 @@
   </section>
 
 </div>
+
+<dialog id="roomDlg" class="dlg">
+  <form method="dialog" class="dlg-in">
+    <h2>Комната <span class="room">#<b id="fp2">····</b></span></h2>
+    <p class="hint">Ссылка содержит ключ. Тот, у кого она есть, читает всю переписку. Ключ остаётся в адресе после «#» и на сервер не отправляется.</p>
+    <input id="inviteLink" class="dlg-input" type="text" readonly aria-label="Ссылка-приглашение">
+    <div class="dlg-row">
+      <button id="copyInvite" type="button" class="btn sm">Копировать ссылку</button>
+      <button id="shareInvite" type="button" class="btn sm ghost" hidden>Поделиться</button>
+    </div>
+    <hr>
+    <p class="hint">Удалит ключ, кеш фото и голосовых на этом устройстве.</p>
+    <div class="dlg-row"><button id="wipeLocal" type="button" class="btn sm ghost">Очистить это устройство</button></div>
+    <p class="hint">Сотрёт все сообщения и файлы комнаты на сервере у всех участников. Отменить нельзя.</p>
+    <div class="dlg-row"><button id="wipeRoom" type="button" class="btn sm danger">Удалить чат для всех</button></div>
+    <div class="dlg-row end"><button class="link" value="close">закрыть</button></div>
+  </form>
+</dialog>
 <script src="app.js"></script>
 </body>
 </html>

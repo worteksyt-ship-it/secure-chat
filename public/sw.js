@@ -1,6 +1,6 @@
-// VIZARD service worker. Network-first for everything (bypassing HTTP cache), cache only as
-// offline fallback. Never touches /ws, /health, /api. Bump VERSION on every protocol change.
-const VERSION = 'v5';
+// VIZARD service worker. Network-first for everything (always revalidated, cheap 304s via ETag),
+// cache only as offline fallback. Never touches /ws, /health, /api. Bump VERSION on every protocol change.
+const VERSION = 'v6';
 const CACHE = 'vizard-shell-' + VERSION;
 const SHELL = ['/', '/index.html', '/style.css', '/app.js', '/logo.svg', '/wordmark.svg', '/manifest.webmanifest',
   '/favicon-32.png', '/apple-touch-icon.png', '/icon-192.png', '/icon-512.png', '/icon-maskable-192.png', '/icon-maskable-512.png'];
@@ -20,7 +20,7 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== location.origin) return;
   if (url.pathname.startsWith('/ws') || url.pathname.startsWith('/health') || url.pathname.startsWith('/api') || url.pathname === '/sw.js') return;
   e.respondWith(
-    fetch(req, { cache: 'no-store' }).then((res) => {
+    fetch(req, { cache: 'no-cache' }).then((res) => {
       if (res.ok && res.type === 'basic') { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
       return res;
     }).catch(() => caches.match(req).then((r) => r || (req.mode === 'navigate' ? caches.match('/index.html') : Response.error())))

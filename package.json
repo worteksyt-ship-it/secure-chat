@@ -1,10 +1,10 @@
 {
   "name": "secure-chat",
   "version": "1.0.0",
-  "description": "",
+  "description": "VIZARD: end-to-end encrypted chat",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test test/server.test.js test/spoof.test.js",
     "start": "node server.js"
   },
   "keywords": [],
@@ -13,6 +13,7 @@
   "type": "commonjs",
   "dependencies": {
     "better-sqlite3": "^13.0.3",
+    "compression": "^1.8.2",
     "express": "^5.3.0",
     "ws": "^8.22.2"
   },
